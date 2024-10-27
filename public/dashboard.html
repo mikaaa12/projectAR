@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Location Tracker</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <h1>Location Dashboard</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>Latitude</th>
+                <th>Longitude</th>
+            </tr>
+        </thead>
+        <tbody id="location-table">
+            <!-- Data lokasi akan ditambahkan di sini -->
+        </tbody>
+    </table>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io.connect();
+
+        // socket.on('locationUpdate', (data) => {
+        //     const table = document.getElementById('location-table');
+        //     const row = document.createElement('tr');
+        //     row.innerHTML = `<td>${data.latitude}</td><td>${data.longitude}</td>`;
+        //     table.appendChild(row);
+        // });
+        socket.on('locationUpdate', function(data) {
+            const table = document.getElementById('location-table');
+            const row = document.createElement('tr');
+            const locationsDiv = document.getElementById('locations');
+            const locationInfo = document.createElement('p');
+            locationInfo.innerText = `New Location: Latitude: ${data.latitude}, Longitude: ${data.longitude}`;
+            locationsDiv.appendChild(locationInfo);
+            console.log(`Location received: Latitude: ${data.latitude}, Longitude: ${data.longitude}`);
+        });
+    </script>
+</body>
+</html>

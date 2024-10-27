@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>AR.js GPS Demo</title>
+    <!-- A-Frame Library -->
+    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+    <!-- AR.js for A-Frame -->
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <!-- Socket.IO -->
+    <script src="/socket.io/socket.io.js"></script>
+</head>
+<body style="margin: 0; overflow: hidden;">
+    <a-scene
+        vr-mode-ui="enabled: false"
+        embedded
+        arjs="sourceType: webcam; sourceWidth:1280; sourceHeight:960; displayWidth: 1280; displayHeight: 960; debugUIEnabled: true;">
+        <a-camera gps-camera rotation-reader></a-camera>
+    </a-scene>
+
+    <!-- Info lokasi sekarang -->
+    <div id="current-location" style="position: absolute; bottom: 10px; left: 10px; background: white; padding: 10px; z-index: 10;">
+        <p>Current Location: </p>
+        <p>Latitude: <span id="current-lat">-</span></p>
+        <p>Longitude: <span id="current-lon">-</span></p>
+        <p>Distance to Last Location: <span id="distance">-</span> meters</p>
+    </div>
+
+    <!-- Form untuk input latitude dan longitude -->
+    <div style="position: absolute; top: 10px; left: 10px; background: white; padding: 10px; z-index: 10;">
+        <label>Latitude:</label>
+        <input type="number" id="latitude" step="any" placeholder="e.g., -6.200000">
+        <br>
+        <label>Longitude:</label>
+        <input type="number" id="longitude" step="any" placeholder="e.g., 106.816666">
+        <br>
+        <button onclick="addLocation()">Add Location</button>
+        <button onclick="clearLocations()">Clear Locations</button>
+    </div>
+
+    <script>
+        const socket = io(); // Initialize Socket.IO
+        const locations = [];
+        let currentLat = null;
+        let currentLon = null;
+
+        function addLocation() {
+            const lat = parseFloat(document.getElementById('latitude').value);
+            const lon = parseFloat(document.getElementById('longitude').value);
+
+            if (!isNaN(lat) && !isNaN(lon)) {
+                locations.push({ latitude: lat, longitude: lon });
+                createEntity(lat, lon, "Here");
+                calculateDistance(lat, lon); 
+                checkArrival(lat, lon);
+                
+                // Emit the new location data to the server
+                socket.emit('locationUpdate', { latitude: lat, longitude: lon });
+
+                console.log(`Added location: ${lat}, ${lon}`);
+            } else {
+                alert('Please enter both latitude and longitude.');
+            }
+        }
+
+        function createEntity(lat, lon, label) {
+            const scene = document.querySelector('a-scene');
+
+            const box = document.createElement('a-box');
+            box.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lon};`);
+            box.setAttribute('scale', '5 5 5');
+            box.setAttribute('material', 'color: red;');
+            box.setAttribute('visible', 'true');
+
+            const text = document.createElement('a-text');
+            text.setAttribute('value', label);
+            text.setAttribute('gps-entity-place', `latitude: ${lat}; longitude: ${lon};`);
+            text.setAttribute('scale', '20 20 20');
+            text.setAttribute('align', 'center');
+            text.setAttribute('position', '0 3 0');
+
+            scene.appendChild(box);
+            scene.appendChild(text);
+
+            return box;
+        }
+
+        function clearLocations() {
+            locations.length = 0; 
+            const scene = document.querySelector('a-scene');
+            const entities = scene.querySelectorAll('a-box, a-text');
+            entities.forEach(entity => entity.parentNode.removeChild(entity));
+            console.log('All locations cleared');
+        }
+
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                currentLat = position.coords.latitude;
+                currentLon = position.coords.longitude;
+                createEntity(currentLat, currentLon, "Your Location");
+                updateCurrentLocation(currentLat, currentLon);
+                console.log(`Your Location: ${currentLat}, ${currentLon}`);
+            },
+            (err) => {
+                console.error('Error accessing location: ', err);
+            },
+            {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+            }
+        );
+
+        function updateCurrentLocation(lat, lon) {
+            document.getElementById('current-lat').innerText = lat;
+            document.getElementById('current-lon').innerText = lon;
+        }
+
+        function calculateDistance(lat, lon) {
+            if (currentLat !== null && currentLon !== null) {
+                const point1 = [currentLat, currentLon];
+                const point2 = [lat, lon];
+                const distance = getDistance(point1, point2);
+                document.getElementById('distance').innerText = distance.toFixed(2);
+            }
+        }
+
+        function getDistance(point1, point2) {
+            const R = 6371000; 
+            const lat1 = point1[0] * Math.PI / 180;
+            const lat2 = point2[0] * Math.PI / 180;
+            const deltaLat = (point2[0] - point1[0]) * Math.PI / 180;
+            const deltaLon = (point2[1] - point1[1]) * Math.PI / 180;
+
+            const a = Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+                      Math.cos(lat1) * Math.cos(lat2) *
+                      Math.sin(deltaLon / 2) * Math.sin(deltaLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+            return R * c;
+        }
+
+        let userLocationEntity;
+
+        navigator.geolocation.watchPosition(
+            (position) => {
+                currentLat = position.coords.latitude;
+                currentLon = position.coords.longitude;
+                updateCurrentLocation(currentLat, currentLon);
+
+                if (userLocationEntity) {
+                    userLocationEntity.parentNode.removeChild(userLocationEntity);
+                }
+
+                userLocationEntity = createEntity(currentLat, currentLon, "Your Location");
+                console.log(`Updated Location: ${currentLat}, ${currentLon}`);
+            },
+            (err) => {
+                console.error('Error watching location: ', err);
+            },
+            {
+                enableHighAccuracy: true,
+                timeout: 10000,
+                maximumAge: 0
+            }
+        );
+
+        function checkArrival(lat, lon) {
+            const point1 = [currentLat, currentLon];
+            const point2 = [lat, lon];
+            const distance = getDistance(point1, point2);
+
+            if (distance <= 1) {
+                alert("Arrive");
+            }
+        }
+    </script>
+</body>
+</html>
